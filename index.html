@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>附件批量下载</title>
+  <script type="module" src="./index.ts"></script>
+</head>
+
+<body>
+  <div id='mask'>
+    <div class="d-flex justify-content-center">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <div>
+      <p class='desc'>批量将附件字段文件下载至电脑，下载速度更快，并且支持超过 1G 的附件下载</p>
+    </div>
+
+    <form>
+      <ul>
+        <li>
+          <label for="xTable">数据表：</label>
+          <select class="form-select" aria-label="Default select" id="xTable" name="xTable">
+            <option value="0">请选择数据表</option>
+          </select>
+        </li>
+        <li>
+          <label for="xField">字段名（可多选，使用 Ctrl 或 Shift）：</label>
+          <select size="4" class="form-select" multiple aria-label="multiple select" id="xField" name="xField" multiple="true">
+          </select>
+        </li>
+      </ul>
+    </form>
+    <button type="button" class="btn btn-primary" id="btn">下载</button>
+    <p id="mystatus"></p>
+  </main>
+
+  <div class='tips'>
+    <p>使用须知：</p>
+    <ol>
+      <li><span class='dot'></span> 调用浏览器原生下载功能，若浏览器提示下载多个文件时，请选择「允许」</li>
+      <li><span class='dot'></span> 需要有附件下载权限，使用时请确保拥有权限</li>
+      <li><span class='dot'></span> 下载路径为浏览器默认下载路径；下载时，使用附件的原始文件名，若出现重名，浏览器将自动添加后缀做区分</li>
+      <li><span class='dot'></span> 多维表格新增数据表或字段时，请重新运行本工具</li>
+    </ol>
+  </div>
+</body>
+
+</html>
