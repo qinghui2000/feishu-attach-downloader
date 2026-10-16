@@ -52,6 +52,13 @@
           <select class="form-select" id="xNameField" name="xNameField">
           </select>
         </li>
+        <li>
+          <label for="xDownMode">下载方式：</label>
+          <select class="form-select" id="xDownMode" name="xDownMode">
+            <option value="single">逐个文件下载</option>
+            <option value="zip">打包 ZIP 下载</option>
+          </select>
+        </li>
       </ul>
     </form>
     <button type="button" class="btn btn-primary" id="btn">下载</button>
@@ -61,11 +68,11 @@
   <div class='tips'>
     <p>使用须知：</p>
     <ol>
-      <li><span class='dot'></span> 调用浏览器原生下载功能，若浏览器提示下载多个文件时，请选择「允许」</li>
+      <li><span class='dot'></span> 逐个下载：调用浏览器原生下载，若提示下载多个文件请选择「允许」；支持超大附件（&gt;1G）</li>
+      <li><span class='dot'></span> 打包 ZIP：所有附件打成一个压缩包一次下完；需读取全部文件到内存，适合中小文件量，附件过多或单个超大（接近/超过1G）时建议改用逐个下载，以免内存不足</li>
       <li><span class='dot'></span> 需要有附件下载权限，使用时请确保拥有权限</li>
       <li><span class='dot'></span> 视图：选择某个视图后，只下载该视图筛选/排序后可见的记录；想下载整表请选记录最全的视图（如默认「表格」视图且无筛选）</li>
-      <li><span class='dot'></span> 下载路径为浏览器默认下载路径；「原文件名称」模式使用附件原始文件名，若重名浏览器自动加后缀区分</li>
-      <li><span class='dot'></span> 「从表字段选择」模式用所选字段的值给文件命名（自动保留原扩展名）；同一单元格有多个附件时追加序号；该模式会读取文件内容后重命名，超大文件会稍慢</li>
+      <li><span class='dot'></span> 「原文件名称」用附件原始文件名；「从表字段选择」用所选字段值命名（保留原扩展名，同格多附件追加序号）；重名自动加序号区分</li>
       <li><span class='dot'></span> 多维表格新增数据表、视图或字段时，请重新运行本工具</li>
     </ol>
   </div>
