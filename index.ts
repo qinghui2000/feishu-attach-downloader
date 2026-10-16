@@ -2,11 +2,14 @@
 import { bitable } from '@base-open/web-api';
 import './index.scss';
 
-//获取HTML的标签内容
-let oF = document.getElementById("oField");
+// 获取 HTML 标签
 let btn = document.getElementById("btn");
 let xT = document.getElementById("xTable");
+let xV = document.getElementById("xView");
 let xF = document.getElementById("xField");
+let xNameMode = document.getElementById("xNameMode");
+let xNameField = document.getElementById("xNameField");
+let nameFieldLi = document.getElementById("nameFieldLi");
 let mystatus = document.getElementById("mystatus");
 let mask = document.getElementById("mask");
 
@@ -15,103 +18,115 @@ function setLoading(loading) {
 }
 
 setLoading(true);
-// 刚渲染本插件的时候所选的tableId等信息
 const selection = await bitable.base.getSelection();
 
-//定义一个类型，用于存放筛选出的数据表及对应的附件字段
+// 存放数据表及对应字段信息
 class MYTABLE {
-  xtable;
-  xfields
+  xtable;        // 表 meta
+  xfields;       // 附件字段(type=17)
+  allfields;     // 全部字段(用于命名字段选择)
+  views;         // 视图 meta 列表 [{id,name,type}]
 }
 
-//定义存放单个文件地址、文件名的类
-class MYFILE {
-  file_url;
-  file_name
-}
-
-
-//定义存放数据表中附件字段信息的数组
 let targetFields = [];
-//获取当前多维表的数据表清单，以及各个数据表中包含有附件的字段内容
 let oTables = await bitable.base.getTableMetaList();
-console.log(oTables);
 
-//针对每个数据表，检查获取其中的附件类型的字段
 for (let i = 0; i < oTables.length; i++) {
   let cTable = await bitable.base.getTableById(oTables[i].id);
   let cFields = await cTable.getFieldMetaList();
-
-  //将cFields中的type=17（类型为附件）的内容过滤出来.
   let aFields = cFields.filter(fTypeCheck);
-  //创建一个对象，存放数据表及对应的附件字段信息
+  let vMetas = [];
+  try {
+    vMetas = await cTable.getViewMetaList();
+  } catch (e) {
+    vMetas = [];
+  }
   let temp = new MYTABLE();
   temp.xtable = oTables[i];
   temp.xfields = aFields;
-  //将temp压到数组中
+  temp.allfields = cFields;
+  temp.views = vMetas;
   targetFields.push(temp);
 }
-console.log(targetFields);
-//将字段信息填充到select标记中
-//将数据表信息填充到select
-fillSelect(xT, oTables);
 
-//为select添加事件监听onchange，选择不同的数据表时，联动fields内容变更
+// 填充数据表下拉
+fillSelect(xT, oTables);
 xT.addEventListener("change", optUpdate);
 
-xT.value = oTables.find(({ id }) => id === selection.tableId).name;
-optUpdate()
-xF.value = xF.options['0'].value
+// 命名方式切换：显示/隐藏命名字段选择
+xNameMode.addEventListener("change", toggleNameField);
+function toggleNameField() {
+  nameFieldLi.style.display = (xNameMode.value === "field") ? "" : "none";
+}
+toggleNameField();
 
-//为按钮添加click监听
-btn.addEventListener("click", async function() {
+xT.value = oTables.find(({ id }) => id === selection.tableId).name;
+optUpdate();
+if (xF.options.length > 0) xF.value = xF.options['0'].value;
+
+btn.addEventListener("click", async function () {
   mystatus.textContent = "start.......";
-  //待下载文件计数器初始化
   let fcnt = 0;
-  //定义一个数组，用于存放取出来的URL地址和文件名
-  let myFiles = [];
-  //获取数据表名称和字段名称
+
   let oTN = xT.value;
-  //获得需要操作的数据表
   let oTable = await bitable.base.getTableByName(oTN);
-  let oFN = getMultiValue();//需要导出的字段是一个数组
-  //对字段进行遍历
+  let oFN = getMultiValue();            // 需要导出的附件字段数组
+  if (oFN.length === 0) {
+    mystatus.textContent = "请先选择至少一个附件字段。";
+    return;
+  }
+
+  // 命名方式
+  let nameMode = xNameMode.value;       // origin | field
+  let nameFieldName = (nameMode === "field") ? xNameField.value : null;
+  let oNameField = null;
+  if (nameMode === "field" && nameFieldName) {
+    oNameField = await oTable.getFieldByName(nameFieldName);
+  }
+
+  // 记录范围：按所选视图的可见记录；取不到则回退整表
+  let recordIds = await getRecordIdsByView(oTable, xV.value);
+
   for (let fi = 0; fi < oFN.length; fi++) {
-    //获取需要操作的字段对象
     let oField = await oTable.getFieldByName(oFN[fi]);
-    //获取记录条目数组
-    let oRecordList = await oTable.getRecordIdList();
-    //对oField字段中每一条Record进行循环，若不为空，则将其中的token取出，获取URL，进行下载
-    for (let i = 0; i < oRecordList.length; i++) {
-      let oCell = await oTable.getCellValue(oField.id, oRecordList[i]);
+
+    for (let i = 0; i < recordIds.length; i++) {
+      let oCell = await oTable.getCellValue(oField.id, recordIds[i]);
       if (oCell != null) {
-        //将文件数量记录到计数器中
+        // 该记录的命名字段值(字段命名模式)
+        let baseName = "";
+        if (nameMode === "field" && oNameField) {
+          let nv = await oTable.getCellValue(oNameField.id, recordIds[i]);
+          baseName = safeName(cellToStr(nv));
+        }
+
         fcnt = fcnt + oCell.length;
-        //一个单元格内可能有多个附件
         for (let j = 0; j < oCell.length; j++) {
           let oToken = oCell[j].token;
           let oFileName = oCell[j].name;
-          let oURL = await oTable.getAttachmentUrl(oToken, oField.id, oRecordList[i]);
-          //将获得的URL和文件名存放到一个文件对象中
-          let myFile = new MYFILE();
-          myFile.file_url = oURL;
-          myFile.file_name = oFileName;
-          //将该对象添加到数组中
-          myFiles.push(myFile);
-          myDownload(myFile);
+          let oURL = await oTable.getAttachmentUrl(oToken, oField.id, recordIds[i]);
+
+          if (nameMode === "field") {
+            let ext = getExt(oFileName);
+            let base0 = baseName || stripExt(oFileName);
+            let finalName = base0 + ext;
+            if (oCell.length > 1) finalName = base0 + "_" + (j + 1) + ext;
+            await downloadRenamed(oURL, finalName, oFileName);
+          } else {
+            myDownload({ file_url: oURL, file_name: oFileName });
+          }
         }
       }
     }
-
   }
 
   mystatus.textContent = "已完成，共计" + fcnt + "个文件。";
 });
 
+setLoading(false);
 
-setLoading(false)
+// ---------- 工具函数 ----------
 
-//将获得的数组信息填充到select标记的option中的函数
 function fillSelect(tMark, mArray) {
   for (let i = 0; i < mArray.length; i++) {
     let temp = document.createElement("option");
@@ -121,61 +136,154 @@ function fillSelect(tMark, mArray) {
   }
 }
 
-
-//从数据表选择联动附件字段的函数，更新字段选项信息
+// 数据表联动：更新视图 + 附件字段 + 命名字段
 function optUpdate(e) {
-  //对xF中的option清空。
   xF.options.length = 0;
+  xNameField.options.length = 0;
+  xV.options.length = 0;
 
-  //console.log(xF.getElementsByTagName("option"));
-  //获取xT的值
   let sel1 = xT.value;
   if (sel1 != "0") {
-    //用sel1的值去targetFields[j].xtable.name中查找对应名称的数据表
     for (let j = 0; j < targetFields.length; j++) {
       if (sel1 === targetFields[j].xtable.name) {
-        //如果符合当前选择的数据表名称，取其中的xfields的名称，创建option。
+        // 视图下拉（value=视图id，文本=视图名）
+        let vs = targetFields[j].views || [];
+        for (let v = 0; v < vs.length; v++) {
+          let vopt = document.createElement("option");
+          vopt.setAttribute("value", vs[v].id);
+          vopt.textContent = vs[v].name;
+          xV.appendChild(vopt);
+        }
+        // 默认选中当前选区的视图
+        if (selection && selection.viewId) {
+          for (let v = 0; v < xV.options.length; v++) {
+            if (xV.options[v].value === selection.viewId) { xV.selectedIndex = v; break; }
+          }
+        }
+        // 附件字段
         for (let k = 0; k < targetFields[j].xfields.length; k++) {
           let newopt = document.createElement("option");
           newopt.setAttribute("value", targetFields[j].xfields[k].name);
           newopt.textContent = targetFields[j].xfields[k].name;
           xF.appendChild(newopt);
         }
+        // 命名字段：全部字段
+        for (let k = 0; k < targetFields[j].allfields.length; k++) {
+          let f = targetFields[j].allfields[k];
+          let nameopt = document.createElement("option");
+          nameopt.setAttribute("value", f.name);
+          nameopt.textContent = f.name;
+          xNameField.appendChild(nameopt);
+        }
       }
     }
   }
 }
 
-//从数组种筛选type=17的内容函数
+// 根据视图 id 取可见记录；失败回退整表
+async function getRecordIdsByView(oTable, viewId) {
+  if (viewId) {
+    try {
+      let view = await oTable.getViewById(viewId);
+      let ids = await view.getVisibleRecordIdList();
+      // 过滤分组空行等 null
+      ids = (ids || []).filter(function (x) { return x != null; });
+      if (ids.length > 0) return ids;
+    } catch (e) { /* 回退 */ }
+  }
+  return await oTable.getRecordIdList();
+}
+
 function fTypeCheck(m) {
   if (m.type === 17) {
     return m;
   }
 }
 
-//获取下拉多选内容的函数
 function getMultiValue() {
   let multiV = [];
   let mseled = xF.selectedOptions;
   for (let i = 0; i < mseled.length; i++) {
     multiV.push(mseled[i].value);
-    //console.log(mseled[i].selected); // 必定是true
-    //console.log(mseled[i].value);  // 选中的option的值
   }
   return multiV;
 }
 
-
-
-//根据URL、文件名，模拟生成HTML的标签，并点击下载的函数
+// 原生下载(原文件名模式，支持超大文件)
 function myDownload(oFile) {
-
-  let xlink = document.createElement("a"); // 创建一个 a 标签用来模拟点击事件	
+  let xlink = document.createElement("a");
   xlink.style.display = "none";
   xlink.href = oFile.file_url;
   xlink.setAttribute("download", oFile.file_name);
   document.body.appendChild(xlink);
   xlink.click();
   document.body.removeChild(xlink);
+}
 
+// 字段命名模式：fetch 读取后用自定义文件名保存；失败回退原生
+async function downloadRenamed(url, finalName, origName) {
+  try {
+    let resp = await fetch(url);
+    if (!resp.ok) throw new Error("http " + resp.status);
+    let blob = await resp.blob();
+    saveBlob(blob, finalName);
+  } catch (e) {
+    myDownload({ file_url: url, file_name: finalName || origName });
+  }
+}
+
+function saveBlob(blob, filename) {
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement("a");
+  a.style.display = "none";
+  a.href = url;
+  a.setAttribute("download", filename);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+}
+
+// 单元格值 -> 字符串(兼容文本/数字/单选/多选/人员等常见类型)
+function cellToStr(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return String(v);
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (Array.isArray(v)) {
+    return v.map(function (seg) {
+      if (seg == null) return "";
+      if (typeof seg === "string") return seg;
+      if (typeof seg === "number") return String(seg);
+      return (seg.text != null ? seg.text
+            : seg.name != null ? seg.name
+            : seg.enName != null ? seg.enName
+            : seg.id != null ? seg.id : "");
+    }).join("").trim();
+  }
+  if (typeof v === "object") {
+    return (v.text != null ? v.text
+          : v.name != null ? v.name
+          : v.enName != null ? v.enName
+          : v.id != null ? v.id : "").toString();
+  }
+  return String(v);
+}
+
+// 文件名非法字符处理
+function safeName(s) {
+  if (s == null) return "";
+  return String(s).replace(/[\\/:*?"<>|\r\n\t]/g, "_").replace(/\s+/g, " ").trim();
+}
+
+function getExt(name) {
+  if (!name) return "";
+  let i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i) : "";
+}
+
+function stripExt(name) {
+  if (!name) return "";
+  let i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(0, i) : name;
 }
